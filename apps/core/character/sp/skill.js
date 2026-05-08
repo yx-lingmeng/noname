@@ -1898,19 +1898,22 @@ const skills = {
 				const { debateResult: result } = event;
 				const { bool, opinion, targets, opinions } = result;
 				if (opinion == "red") {
-					await player
-						.gain(result.red.map(i => i[1]))
-						.set("animate", event => {
-							var player = event.player,
-								cards = event.cards;
-							event.targets.forEach((target, index) => {
-								target.$give(cards[index], player);
-							});
-						})
-						.set(
-							"targets",
-							result.red.map(i => i[0]).filter(target => target != player)
-						);
+					const cards = result.red.flatMap(i => i[1]).filter(card => get.itemtype(card) == "card");
+					if (cards.length) {
+						await player
+							.gain(cards)
+							.set("animate", event => {
+								const player = event.player,
+									cards = event.cards;
+								event.targets.forEach((target, index) => {
+									target.$give(cards[index], player);
+								});
+							})
+							.set(
+								"targets",
+								result.red.map(i => i[0]).filter(target => target != player)
+							);
+					}
 				} else if (opinion == "black") {
 					const drawer = result.red
 						.map(i => i[0])
@@ -1919,6 +1922,10 @@ const skills = {
 					await game.asyncDraw([player].concat(drawer));
 				}
 			});
+		},
+		ai: {
+			order: 6,
+			result: { player: 1 },
 		},
 	},
 	olshuoyu: {
@@ -1940,24 +1947,28 @@ const skills = {
 				const { debateResult: result } = event;
 				const { bool, opinion, targets, opinions } = result;
 				if (opinion == "red") {
-					const lose_list = [];
+					const lose_map = new Map();
 					for (const color of opinions) {
 						for (const [target, card] of result[color]) {
-							const list = lose_list.find(i => i[0] == target);
-							if (!list) {
-								lose_list.push([target, [card]]);
+							if (get.itemtype(card) != "card") {
+								continue;
+							}
+							if (!lose_map.has(target)) {
+								lose_map.set(target, [card]);
 							} else {
-								lose_list[lose_list.indexOf(list)][1].push(card);
+								lose_map.get(target).push(card);
 							}
 						}
 					}
-					await game
-						.loseAsync({
-							lose_list: lose_list,
-							discarder: player,
-						})
-						.setContent("discardMultiple");
-					const evt = event.getTrigger(); //.getParent(2)
+					if (lose_map.size) {
+						await game
+							.loseAsync({
+								lose_list: Array.from(lose_map),
+								discarder: player,
+							})
+							.setContent("discardMultiple");
+					}
+					const evt = event.getTrigger();
 					const targetsx = game.filterPlayer(target => !evt.targets?.includes(target) && lib.filter.targetEnabled(evt.card, evt.player, target) && !targets.includes(target));
 					if (targetsx.length) {
 						const result = await player
@@ -1978,9 +1989,7 @@ const skills = {
 							evtx.targets.push(result.targets[0]);
 						}
 					}
-				} /* else if (opinion == "black") {
-					player.tempBanSkill("olshuoyu", { player: "phaseAfter" });
-				}*/
+				}
 			});
 		},
 	},
@@ -4526,10 +4535,11 @@ const skills = {
 		},
 		async content(event, trigger, player) {
 			const target = event.targets[0];
-			target.chooseUseTarget(new lib.element.VCard({ name: "sha", storage: { olzongluan: true }, isCard: true }), true, false).set("selectTarget", [1, Infinity]);
-			const num = game.countPlayer2(c => c.hasHistory("damage", evt => evt.getParent(4).name == "olzongluan"), true);
+			const next = target.chooseUseTarget(new lib.element.VCard({ name: "sha", storage: { olzongluan: true }, isCard: true }), true, false).set("selectTarget", [1, Infinity]);
+			await next;
+			const num = game.countPlayer2(current => current.hasHistory("damage", evt => evt.getParent(3) == next), true);
 			if (num > 0) {
-				await player.chooseToDiscard(num, true, "he");
+				await player.chooseToDiscard(num, true, "he", "allowChooseAll");
 			}
 		},
 		init(player, skill) {
@@ -34084,18 +34094,23 @@ const skills = {
 		audio: 2,
 		enable: "phaseUse",
 		filter(event, player) {
-			return player.countCards("h", "sha") > 0;
+			return player.hasCard(card => get.info("juesi").filterCard(card, player), "h") && game.hasPlayer(current => get.info("juesi").filterTarget(null, player, current));
 		},
 		filterTarget(card, player, target) {
 			return target != player && target.countCards("he") > 0 && player.inRange(target);
 		},
-		filterCard: { name: "sha" },
-		content() {
-			"step 0";
-			target.chooseToDiscard("he", true);
-			"step 1";
-			if (target.hp >= player.hp && result.bool && result.cards[0].name != "sha") {
-				player.useCard({ name: "juedou", isCard: true }, target);
+		filterCard(card, player) {
+			return get.name(card) == "sha" && lib.filter.cardDiscardable(card, player, "juesi");
+		},
+		async content(event, trigger, player) {
+			const { target } = event;
+			const juedou = get.autoViewAs({ name: "juedou", isCard: true });
+			if (!target.countDiscardableCards(target, "he")) {
+				return;
+			}
+			const result = await target.chooseToDiscard("he", true).forResult();
+			if (target.hp >= player.hp && result?.cards?.length && result.cards[0].name != "sha" && player.canUse(juedou, target)) {
+				await player.useCard(juedou, target);
 			}
 		},
 		ai: {

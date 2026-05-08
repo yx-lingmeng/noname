@@ -1211,7 +1211,7 @@ const skills = {
 					.when("useCardAfter")
 					.filter(evt => evt.card == card)
 					.then(async (event, trigger, player) => {
-						if (game.hasPlayer(target => target.hasHistory("damage", evt => evt.card == trigger.card))) {
+						if (game.hasPlayer2(target => target.hasHistory("damage", evt => evt.card == trigger.card))) {
 							await player.chooseUseTarget({ card: cards?.[0], addCount: false });
 						}
 					});
@@ -3068,7 +3068,7 @@ const skills = {
 		},
 	},
 	oltianen: {
-		audio: 2,
+		audio: 3,
 		forced: true,
 		trigger: {
 			player: "useCardToPlayered",
@@ -3132,7 +3132,7 @@ const skills = {
 		},
 	},
 	olqiangang: {
-		audio: 2,
+		audio: 3,
 		derivation: ["olrumo"],
 		enable: "phaseUse",
 		filter(event, player) {
@@ -11413,7 +11413,7 @@ const skills = {
 				.when("phaseJieshuBegin")
 				.filter(evt => evt.getParent() == trigger.getParent())
 				.step(async () => {
-					if (player.hasHistory("useCard", evtx => get.is.damageCard(evtx.card)) && player.countDiscardableCards("he")) {
+					if (player.hasHistory("useCard", evtx => get.is.damageCard(evtx.card)) && player.countDiscardableCards(player, "he")) {
 						await player.chooseToDiscard("he", game.countGroup(), true);
 					}
 				});
